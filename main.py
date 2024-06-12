@@ -43,7 +43,7 @@ def training(seed, model, args, out_file=None):
     transform = transforms.Compose([transforms.ToTensor(), transforms.Resize(2*args.input_height)])
     # Download and load the training data
     if args.dataset == 'MNIST':
-        trainset = datasets.MNIST(root='', train=True, download=True, transform=transform)
+        trainset = datasets.MNIST(root='~/.pytorch/data', train=True, download=False, transform=transform)
     elif args.dataset == 'FashionMNIST':
         trainset = datasets.FashionMNIST('~/.pytorch/F_MNIST_data/', download=True, train=True, transform=transform)
     else:
