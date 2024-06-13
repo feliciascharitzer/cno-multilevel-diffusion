@@ -48,8 +48,14 @@ def training(seed, model, args, out_file=None):
         trainset = datasets.FashionMNIST('~/.pytorch/F_MNIST_data/', download=True, train=True, transform=transform)
     else:
         raise argparse.ArgumentTypeError(f"Not a predefined dataset")
-    
-    train_set, val_set = torch.utils.data.random_split(trainset, [60000-args.num_samples_mmd, args.num_samples_mmd])
+
+    # train on 1/10 of dataset to test implementation
+    if args.subset:
+        subset_indices = np.random.choice(len(trainset), 6000, replace=False)
+        train_subset = torch.utils.data.Subset(trainset, subset_indices)
+        train_set, val_set = torch.utils.data.random_split(train_subset, [6000-args.num_samples_mmd, args.num_samples_mmd])  
+    else:
+        train_set, val_set = torch.utils.data.random_split(trainset, [60000-args.num_samples_mmd, args.num_samples_mmd])
     trainloader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
 
     valloader = torch.utils.data.DataLoader(val_set, batch_size=args.num_samples_mmd,
@@ -216,9 +222,14 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1, help='seed for random number generator')
     parser.add_argument('--out_dir', type=str, default='result', help='directory for result')
     parser.add_argument('--out_file', type=str, default='result', help='base file name for result')
+    parser.add_argument('--subset', type=bool, default=False, help='enable training on subset (1/10) of dataset')
 
     args = parser.parse_args()
-
+    
+    # testing on smaller dataset affects number of validation samples
+    if args.subset:
+        args.num_samples_mmd = 1000
+    
     args.prior = choose_prior(args.prior_name)
     if args.model == "fno":
         model = FNO2d(args.modes,args.modes,args.width).to(device) 
