@@ -88,6 +88,8 @@ def training(seed, model, args, out_file=None):
 
     rev_sde.train()
     for ep in range(args.n_epochs):
+        if ep % 10 == 0:
+            print(f"epoch: {ep}")
         avg_loss = 0.0
         for k,(x,y) in enumerate(trainloader):
             x = x.to(device) 
