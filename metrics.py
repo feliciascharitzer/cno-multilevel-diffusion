@@ -4,8 +4,11 @@ import scipy
 import scipy.linalg
 from numpy import linalg
 import numpy as np
+import pykeops.config
 
 device = 'cpu'
+# ensure that pykeops runs on cpu
+pykeops.config.gpu_available=False
 
 #add proper reference..
 # https://github.com/layer6ai-labs/dgm-eval
@@ -30,6 +33,8 @@ def sw_approx(X, Y):
 # taken from caterini et al exposing flaws diffusion eval 
 # https://github.com/layer6ai-labs/dgm-eval
 def compute_vendi_score(X, q=1):
+    # X is tensor in cno implementation
+    X = X.numpy()
     X = X/(np.sqrt(np.sum(X**2, axis = 1))[:,None])
     n = X.shape[0]
     S = X @ X.T
