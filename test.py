@@ -12,6 +12,7 @@ from utils import get_samples, makedirs, get_logger, get_samples_batched
 import os
 import datetime
 from metrics import *
+from torchvision import datasets
 
 parser = argparse.ArgumentParser(description='Test arguments')
 parser.add_argument('--dataset', type=str, default='MNIST', choices = ['MNIST', 'FashionMNIST'], help='dataset types')
@@ -38,13 +39,13 @@ logger = get_logger(logpath= out_file + '.txt', filepath=os.path.abspath(__file_
 
 
 logger.info(args.save_model)
-rev_sde = torch.load(args.save_model + '.pt')
+rev_sde = torch.load('result/' + args.save_model + '.pt')
 pool = torch.nn.AvgPool2d(args.upscale)
 transform = transforms.Compose([transforms.ToTensor(), transforms.Resize(args.upscale*args.input_height)])
 
 # Download and load the test data
 if args.dataset == 'MNIST':
-    testset = datasets.MNIST(root='', train=False, download=False, transform=transform)
+    testset = datasets.MNIST(root='~/.pytorch/data', train=False, download=False, transform=transform)
 elif args.dataset == 'FashionMNIST':
     testset = datasets.FashionMNIST('~/.pytorch/F_MNIST_data/', download=False, train=False, transform=transform)
 
