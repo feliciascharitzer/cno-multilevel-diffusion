@@ -75,6 +75,8 @@ def training(seed, model, args, out_file=None):
     logger.info("-------------------------")
     logger.info(str(optim)) # optimizer info
     logger.info("-------------------------\n")
+
+    print(f"The program is running on a {str(device)}.")
     
     min_mmd = 1000
     min_mmd_epoch = 0.
@@ -201,7 +203,7 @@ if __name__ == '__main__':
     numstep_values = [200]
     priorchoices = ['fno','combined_conv','lap_conv','standard']
     modelchoices = ['unet','fno']
-    modeschoices = [12, 14, 15]
+    modeschoices = [8, 12, 14, 15]
     widthchoices = [32, 64, 128]
 
     combinations = list(itertools.product(lrvalues, batches, numstep_values, priorchoices, modelchoices, modeschoices,widthchoices))
