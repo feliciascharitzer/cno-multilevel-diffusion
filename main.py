@@ -56,10 +56,11 @@ def training(seed, model, args, out_file=None):
         train_set, val_set = torch.utils.data.random_split(train_subset, [6000-args.num_samples_mmd, args.num_samples_mmd])  
     else:
         train_set, val_set = torch.utils.data.random_split(trainset, [60000-args.num_samples_mmd, args.num_samples_mmd])
+    
     trainloader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
 
     valloader = torch.utils.data.DataLoader(val_set, batch_size=args.num_samples_mmd,
-                                          shuffle=True, num_workers=0)
+                                          shuffle=True, num_workers=4)
     val_samp = next(iter(valloader))[0]
 
     val_samp_pool = pool(val_samp).view(args.num_samples_mmd,args.input_height**2).to('cpu')
@@ -76,7 +77,7 @@ def training(seed, model, args, out_file=None):
     logger.info(str(optim)) # optimizer info
     logger.info("-------------------------\n")
 
-    print(f"The program is running on a {str(device)}.")
+    logger.info("The program is running on a %s.", 'GPU' if torch.cuda.is_available() else 'CPU')
     
     min_mmd = 1000
     min_mmd_epoch = 0.
@@ -89,7 +90,7 @@ def training(seed, model, args, out_file=None):
     rev_sde.train()
     for ep in range(args.n_epochs):
         if ep % 10 == 0:
-            print(f"epoch: {ep}")
+            logger.info("epoch: %s", str(ep))
         avg_loss = 0.0
         for k,(x,y) in enumerate(trainloader):
             x = x.to(device) 
@@ -226,7 +227,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1, help='seed for random number generator')
     parser.add_argument('--out_dir', type=str, default='result', help='directory for result')
     parser.add_argument('--out_file', type=str, default='result', help='base file name for result')
-    parser.add_argument('--subset', type=bool, default=False, help='enable training on subset (1/10) of dataset')
+    parser.add_argument('--subset', type=int, default=0, help='indicate 1 for training on 1/10th of subset')
 
     args = parser.parse_args()
     
@@ -249,13 +250,15 @@ if __name__ == '__main__':
     input_channels = 1
     
     start_time = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+
     if args.out_file is not None:
-        out_file = os.path.join(args.out_dir, '{:}-{:}_model_{:}_prior_{:}'.format(start_time,args.out_file,args.model,args.prior))
+        out_file = os.path.join(args.out_dir, '{:}-{:}_model_{:}_prior_{:}'.format(start_time,args.out_file,args.model, args.prior))
     else:
         out_file=None
     
     makedirs(args.out_dir)
     logger = get_logger(logpath= out_file + '.txt', filepath=os.path.abspath(__file__))
+
     for arg, value in vars(args).items():
         logger.info("%s: %s", arg, value)
 
