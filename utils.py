@@ -36,6 +36,30 @@ def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True
 
     return logger
 
+# source: older version of https://github.com/camlab-ethz/ConvolutionalNeuralOperator
+
+def resize(x, out_size, permute=False):
+    if permute:
+        x = x.permute(0, 3, 1, 2)
+        
+    f = torch.fft.rfft2(x, norm='backward')
+    f_z = torch.zeros((*x.shape[:-2], out_size[0], out_size[1]//2 + 1), dtype=f.dtype, device=f.device)
+
+    top_freqs1 = min((f.shape[-2] + 1) // 2, (out_size[0] + 1) // 2)
+    top_freqs2 = min(f.shape[-1], out_size[1] // 2 + 1)
+
+    bot_freqs1 = min(f.shape[-2] // 2, out_size[0] // 2)
+    bot_freqs2 = min(f.shape[-1], out_size[1] // 2 + 1)
+    f_z[..., :top_freqs1, :top_freqs2] = f[..., :top_freqs1, :top_freqs2]
+    f_z[..., -bot_freqs1:, :bot_freqs2] = f[..., -bot_freqs1:, :bot_freqs2]
+
+    x_z = torch.fft.irfft2(f_z, s=out_size).real
+    x_z = x_z * (out_size[0] / x.shape[-2]) * (out_size[1] / x.shape[-1])
+
+    if permute:
+        x_z = x_z.permute(0, 2, 3, 1)
+    return x_z
+
 def get_samples(sde, input_channels, input_height, num_steps, num_samples, store_itermediates=True):
     """
 
@@ -51,6 +75,10 @@ def get_samples(sde, input_channels, input_height, num_steps, num_samples, store
 
     delta = sde.T / num_steps
     y0 = sde.prior.sample([num_samples, input_channels, input_height, input_height])
+
+    if scaling != 1.0:
+        y0 = resize(y0, (input_height // scaling, input_height // scaling))
+    
     ts = torch.linspace(0, 1, num_steps + 1).to(y0) * sde.T
     ones = torch.ones(num_samples, 1, 1, 1).to(y0)
 
@@ -63,7 +91,15 @@ def get_samples(sde, input_channels, input_height, num_steps, num_samples, store
             epsilon = sde.prior.sample(y0.shape)
             y0 = y0 + delta * mu + (delta ** 0.5) * sigma * epsilon
             if store_itermediates:
-                Y.append(y0)
+                if scaling != 1.0:
+                    y_up = resize(y0, (input_heigh, input_height))
+                else:
+                    y_up = y0
+                Y.append(y_up)
+
+    if scaling != 1.0:
+        y0 = resize(y0, (input_height, input_height))
+
     return y0, Y
 
 def get_samples_batched(sde, input_channels, input_height, num_steps, num_samples):
@@ -79,11 +115,16 @@ def get_samples_batched(sde, input_channels, input_height, num_steps, num_sample
     :return:
     """
 
+    # [TODO] generalize this
+    scaling = input_height // 28
     delta = sde.T / num_steps
    
     samples = torch.empty(0, device = device)
     for l in range(100):
         y0 = sde.prior.sample([num_samples//100, input_channels, input_height, input_height])
+        if scaling != 1.0:
+            y0 = resize(y0, (input_height // scaling, input_height // scaling))
+
         ts = torch.linspace(0, 1, num_steps + 1).to(y0) * sde.T
         ones = torch.ones(num_samples//100, 1, 1, 1).to(y0)
 
@@ -93,6 +134,9 @@ def get_samples_batched(sde, input_channels, input_height, num_steps, num_sample
                 sigma = sde.sigma(ones * ts[i], y0, lmbd = 0.)
                 epsilon = sde.prior.sample(y0.shape)
                 y0 = y0 + delta * mu + (delta ** 0.5) * sigma * epsilon
+        
+        if scaling != 1.0:
+            y0 = resize(y0, (input_height, input_height))
 
         samples = torch.cat((samples, y0),0)
 
