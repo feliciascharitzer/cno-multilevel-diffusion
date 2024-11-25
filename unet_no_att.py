@@ -9,6 +9,12 @@ import torch.nn.functional as F
 # noinspection PyProtectedMember
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+#--------------------------------------
+
+# Implementation from https://arxiv.org/abs/2303.04772v3 (previous version of repo)
+ 
+#--------------------------------------
+
 class Swish(nn.Module):
     def __init__(self):
         super().__init__()
