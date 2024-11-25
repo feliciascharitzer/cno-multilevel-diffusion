@@ -14,6 +14,12 @@ import datetime
 from metrics import *
 from torchvision import datasets
 
+#--------------------------------------
+
+# Adapted from https://arxiv.org/abs/2303.04772v3 (previous version of repo)
+ 
+#--------------------------------------
+
 parser = argparse.ArgumentParser(description='Test arguments')
 parser.add_argument('--dataset', type=str, default='MNIST', choices = ['MNIST', 'FashionMNIST'], help='dataset types')
 parser.add_argument('--out_dir', type=str, default='test', help='directory for result')
@@ -43,7 +49,7 @@ rev_sde = torch.load('result/' + args.save_model + '.pt')
 pool = torch.nn.AvgPool2d(args.upscale)
 transform = transforms.Compose([transforms.ToTensor(), transforms.Resize(args.upscale*args.input_height)])
 
-# Download and load the test data
+#download and load the test data
 if args.dataset == 'MNIST':
     testset = datasets.MNIST(root='~/.pytorch/data', train=False, download=False, transform=transform)
 elif args.dataset == 'FashionMNIST':
@@ -56,14 +62,14 @@ test_samp = test_samp.view(args.num_samples_mmd,(args.upscale*args.input_height)
 
 
 with torch.no_grad():
-    y0 = get_samples_batched(rev_sde, 1, args.input_height, args.num_steps, args.num_samples_mmd).to('cpu')
+    y0 = get_samples_batched(rev_sde, 1, args.input_height, args.input_height, args.num_steps, args.num_samples_mmd).to('cpu')
 y0 = torch.clamp(y0,0.,1.).view(args.num_samples_mmd,(args.input_height)**2)
 diversity = compute_vendi_score(y0)
 riesz_mmd = mmd(y0, test_samp_pool)
 
 
 with torch.no_grad():
-    y0 = get_samples_batched(rev_sde, 1, 2*args.input_height, args.num_steps, args.num_samples_mmd).to('cpu')
+    y0 = get_samples_batched(rev_sde, 1, args.upscale*args.input_height, args.input_height, args.num_steps, args.num_samples_mmd).to('cpu')
 y0 = torch.clamp(y0,0.,1.).view(args.num_samples_mmd,(args.upscale*args.input_height)**2)
 diversityhigh = compute_vendi_score(y0)
 riesz_mmdhigh = mmd(y0, test_samp)
@@ -71,7 +77,7 @@ riesz_mmdhigh = mmd(y0, test_samp)
 
 logger.info('diversity:%1.4e \t riesz_mmd:%1.4e \t diversityhigh:%1.4e \t riesz_mmdhigh: :%1.4e' % (diversity,  riesz_mmd, diversityhigh, riesz_mmdhigh))
 
-y0 = get_samples(rev_sde, 1, args.input_height, args.num_steps, args.num_samples)[0]
+y0 = get_samples(rev_sde, 1, args.input_height, args.input_height, args.num_steps, args.num_samples)[0]
 y0 = torch.clamp(y0,0.,1.)
 
 plt.figure()
@@ -82,7 +88,7 @@ image_grid = torchvision.utils.make_grid(y0, nrow=4, padding=5).permute((1, 2, 0
 plt.imshow(image_grid.cpu().numpy(), cmap='gray')
 plt.savefig(args.out_dir+'/mnist_samples_28ML'+args.save_model)
 plt.close()
-y0 = get_samples(rev_sde, 1, args.upscale*args.input_height, args.num_steps, args.num_samples)[0]
+y0 = get_samples(rev_sde, 1, args.upscale*args.input_height, args.input_height, args.num_steps, args.num_samples)[0]
 
 y0 = torch.clamp(y0,0.,1.)
 
