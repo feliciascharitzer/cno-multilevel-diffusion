@@ -6,6 +6,12 @@ import numpy as np
 from numpy.linalg import svd
 from fno import *
 
+#--------------------------------------
+
+# Implementation from https://arxiv.org/abs/2303.04772v3 (previous version of repo)
+ 
+#--------------------------------------
+
 class StandardNormal(nn.Module):
 
     def __init__(self):
@@ -29,18 +35,19 @@ class StandardNormal(nn.Module):
     def Q_g2_s(self, g,a): 
         return g*a
 
- class FNOprior(nn.Module):
-    def __init__(self,k1=28,k2=14):
+class FNOprior(nn.Module):
+
+    def __init__(self,k1=28,k2=14, scale=1.):
         super(FNOprior, self).__init__()
         self.k1 = k1
         self.k2 = k2
         self.conv = SpectralConv2d(1,1,k1,k2, rand = False).to(device)
 
     def __repr__(self):
-        return "FNOprior(k1=%d, k2=%d)" %(self.k1,self.k2)
+        return "FNOprior(k1={}, k2={})".format(self.k1, self.k2)
     def sample(self,shape_vec):
         x = torch.randn(shape_vec[0],1,shape_vec[2],shape_vec[3]).to(device)
-        return self.Qmv(x)
+        return self.scale*self.Qmv(x)
 
     def Qmv(self,v):
         return self.conv(v)
