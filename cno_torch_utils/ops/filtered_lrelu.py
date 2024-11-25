@@ -122,7 +122,10 @@ def _filtered_lrelu_ref(x, fu=None, fd=None, b=None, up=1, down=1, padding=0, ga
     """Slow and memory-inefficient reference implementation of `filtered_lrelu()` using
     existing `upfirdn2n()` and `bias_act()` ops.
     """
-    assert isinstance(x, torch.Tensor) and x.ndim == 4
+    while x.dim() < 4:
+        x = x.unsqueeze(-1)
+
+    assert isinstance(x, torch.Tensor) and x.ndim == 4, f"x.ndim = {x.ndim}"
     fu_w, fu_h = _get_filter_size(fu)
     fd_w, fd_h = _get_filter_size(fd)
     if b is not None:
@@ -178,7 +181,10 @@ def _filtered_lrelu_cuda(up=1, down=1, padding=0, gain=np.sqrt(2), slope=0.2, cl
     class FilteredLReluCuda(torch.autograd.Function):
         @staticmethod
         def forward(ctx, x, fu, fd, b, si, sx, sy): # pylint: disable=arguments-differ
-            assert isinstance(x, torch.Tensor) and x.ndim == 4
+            while x.dim() < 4:
+                x = x.unsqueeze(-1)
+            
+            assert isinstance(x, torch.Tensor) and x.ndim == 4, f"x.ndim = {x.ndim}"
 
             # Replace empty up/downsample kernels with full 1x1 kernels (faster than separable).
             if fu is None:
@@ -201,6 +207,8 @@ def _filtered_lrelu_cuda(up=1, down=1, padding=0, gain=np.sqrt(2), slope=0.2, cl
             # Missing bias tensor.
             if b is None:
                 b = torch.zeros([x.shape[1]], dtype=x.dtype, device=x.device)
+
+            assert list(b.size()) == [x.shape[1]], f"list(b.size()): {list(b.size())} not {[x.shape[1]]}"
 
             # Construct internal sign tensor only if gradients are needed.
             write_signs = (si.numel() == 0) and (x.requires_grad or b.requires_grad)
