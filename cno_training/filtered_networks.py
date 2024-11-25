@@ -115,11 +115,11 @@ import numpy as np
 import scipy.signal
 import scipy.optimize
 import torch
-from cnoT_torch_utils import misc
-from cnoT_torch_utils import persistence
-from cnoT_torch_utils.ops import conv2d_gradfix
-from cnoT_torch_utils.ops import filtered_lrelu
-from cnoT_torch_utils.ops import bias_act
+from cno_torch_utils import misc
+from cno_torch_utils import persistence
+from cno_torch_utils.ops import conv2d_gradfix
+from cno_torch_utils.ops import filtered_lrelu
+from cno_torch_utils.ops import bias_act
 
 import torch.nn.utils.parametrize as parametrize
 import torch.nn as nn
@@ -369,22 +369,21 @@ class LReLu(torch.nn.Module):
         self.register_buffer('down_filter', self.design_lowpass_filter(
             numtaps=self.down_taps, cutoff=self.out_cutoff, width=self.out_half_width*2, fs=self.tmp_sampling_rate, radial=self.down_radial))
 
-            
-        # Compute padding. ------------------------------------------------------------------------------
+    def forward(self, x, scaling=1.0, noise_mode='random', force_fp32=False, update_emas=False):
+       
+        dtype = torch.float32
         
-        pad_total = (self.out_size - 1) * self.down_factor + 1 # Desired output size before downsampling.
-        pad_total -= (self.in_size * self.up_factor) # Input size after upsampling.
+        #additional inference of size
+        in_size = self.in_size * scaling
+        out_size = self.out_size * scaling
+
+        pad_total = (out_size - 1) * self.down_factor + 1 # Desired output size before downsampling.
+        pad_total -= (in_size * self.up_factor) # Input size after upsampling.
         pad_total += self.up_taps + self.down_taps - 2 # Size reduction caused by the filters.
                 
         pad_lo = (pad_total + self.up_factor) // 2 # Shift sample locations according to the symmetric interpretation (Appendix C.3).
         pad_hi = pad_total - pad_lo
         self.padding = [int(pad_lo[0]), int(pad_hi[0]), int(pad_lo[1]), int(pad_hi[1])]
-            
-        #------------------------------------------------------------------------------------------------
-
-    def forward(self, x, noise_mode='random', force_fp32=False, update_emas=False):
-       
-        dtype = torch.float32
 
         # Execute bias, filtered leaky ReLU, and clamping.
         gain = np.sqrt(2)
@@ -393,8 +392,7 @@ class LReLu(torch.nn.Module):
             up=self.up_factor, down=self.down_factor, padding=self.padding, gain=gain, slope=slope, clamp=None)
 
 
-        # Ensure correct shape and dtype.
-        misc.assert_shape(x, [None, self.out_channels, int(self.out_size[1]), int(self.out_size[0])])
+        # Ensure correct dtype.
         assert x.dtype == dtype
         return x
 
@@ -434,7 +432,7 @@ class LReLu(torch.nn.Module):
 #----------------------------------------------------------------------------
 #----------------------------------------------------------------------------
 
-class LReLu_standard(torch.nn.Module):
+class LReLu_regular(torch.nn.Module):
     def __init__(self,
         in_channels,                    # Number of input channels.
         out_channels,                   # Number of output channels.
@@ -466,6 +464,10 @@ class LReLu_standard(torch.nn.Module):
             return nn.AvgPool2d(4, stride=4, padding=1)(self.activation(x))
         else:
             return nn.functional.interpolate(self.activation(x), size=self.out_size)
+
+#------------------------------------------------------------------------------------------------
+
+# This function is slower than the cno_lrelu, but it is easier to set it up
 
 class LReLu_torch(torch.nn.Module):
     def __init__(self,
