@@ -4,8 +4,13 @@ import torch.nn as nn
 from priors import *
 from fno import *
 
+#--------------------------------------
+
+# Implementation from https://arxiv.org/abs/2303.04772v3 (previous version of repo)
+ 
+#--------------------------------------
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#add proper reference to source ('huang sde code')
 
 class VariancePreservingSDE(torch.nn.Module):
     """
