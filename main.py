@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from unet_no_att import UNet
 from fno import *
+from cno import *
 from metrics import *
 from unet_no_att import *
 from sde import * 
@@ -21,10 +22,15 @@ from utils import get_samples, makedirs, get_logger, get_samples_batched, epsTes
 import os
 import datetime
 from torch.utils.data import Dataset
+import csv
 
+#--------------------------------------
+
+# Adapted from https://arxiv.org/abs/2303.04772v3  
+ 
+#--------------------------------------
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 
 def training(seed, model, args, out_file=None):
     """
@@ -39,9 +45,9 @@ def training(seed, model, args, out_file=None):
     torch.manual_seed(seed)
     np.random.seed(seed)
     pool = torch.nn.AvgPool2d(2)
-    # Define a transform to normalize the data
+    #define a transform to normalize the data
     transform = transforms.Compose([transforms.ToTensor(), transforms.Resize(2*args.input_height)])
-    # Download and load the training data
+    #download and load the training data
     if args.dataset == 'MNIST':
         trainset = datasets.MNIST(root='~/.pytorch/data', train=True, download=False, transform=transform)
     elif args.dataset == 'FashionMNIST':
@@ -49,7 +55,7 @@ def training(seed, model, args, out_file=None):
     else:
         raise argparse.ArgumentTypeError(f"Not a predefined dataset")
 
-    # train on 1/10 of dataset to test implementation
+    #train on 1/10 of dataset to test implementation
     if args.subset:
         subset_indices = np.random.choice(len(trainset), 6000, replace=False)
         train_subset = torch.utils.data.Subset(trainset, subset_indices)
@@ -74,7 +80,7 @@ def training(seed, model, args, out_file=None):
     optim = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     logger.info("-------------------------")
-    logger.info(str(optim)) # optimizer info
+    logger.info(str(optim)) #optimizer info
     logger.info("-------------------------\n")
 
     logger.info("The program is running on a %s.", 'GPU' if torch.cuda.is_available() else 'CPU')
@@ -106,8 +112,9 @@ def training(seed, model, args, out_file=None):
         if ep % args.val_freq ==0:
 
             with torch.no_grad():
-                y0 = get_samples_batched(rev_sde, 1, args.input_height, args.num_steps, args.num_samples_mmd).view(args.num_samples_mmd,(args.input_height)**2)
-                y02 = get_samples_batched(rev_sde, 1, 2*args.input_height, args.num_steps, args.num_samples_mmd).view(args.num_samples_mmd,(2*args.input_height)**2)
+                y0 = get_samples_batched(rev_sde, 1, args.input_height, args.input_height, args.num_steps, args.num_samples_mmd).view(args.num_samples_mmd,(args.input_height)**2)
+                y02 = get_samples_batched(rev_sde, 1, 2*args.input_height, args.input_height, args.num_steps, args.num_samples_mmd).view(args.num_samples_mmd,(2*args.input_height)**2)
+            
             y0 = torch.clamp(y0,0.,1.).to('cpu')
             y02 = torch.clamp(y02,0.,1.).to('cpu')
             
@@ -120,7 +127,7 @@ def training(seed, model, args, out_file=None):
             mmd2_list.append(riesz2_mmd)
 
             print(riesz_mmd)
-            logger.info('epoch:%05d\t loss:%1.2e \t mmd:%1.2e \t mmdhigh:%1.2e ' % (ep, avg_loss, riesz_mmd, riesz2_mmd))#, eps, epshigh \t eps:%1.2e \t epshigh:%1.2e
+            logger.info('epoch:%05d\t loss:%1.2e \t mmd:%1.2e \t mmdhigh:%1.2e ' % (ep, avg_loss, riesz_mmd, riesz2_mmd))
 
             if riesz2_mmd < min_mmd:
                 torch.save(rev_sde, ("%s-min_checkpoint.pt") % (out_file))
@@ -129,7 +136,7 @@ def training(seed, model, args, out_file=None):
 
         #visualization
         if ep % args.viz_freq==0:
-            y0 = get_samples(rev_sde, 1, args.input_height, args.num_steps, args.num_samples)[0]
+            y0 = get_samples(rev_sde, 1, args.input_height, args.input_height, args.num_steps, args.num_samples)[0]
             y0 = torch.clamp(y0,0.,1.)
 
             plt.figure()
@@ -138,7 +145,7 @@ def training(seed, model, args, out_file=None):
             plt.imshow(image_grid.cpu().numpy(), cmap='gray')
             plt.savefig(("%s-mnist_samples_28ML-%d.png") % (out_file, ep + 1))
             plt.close()
-            y0 = get_samples(rev_sde, 1, 2*args.input_height, args.num_steps, args.num_samples)[0]
+            y0 = get_samples(rev_sde, 1, 2*args.input_height, args.input_height, args.num_steps, args.num_samples)[0]
 
             y0 = torch.clamp(y0,0.,1.)
 
@@ -153,17 +160,15 @@ def training(seed, model, args, out_file=None):
     logger.info(min_mmd_epoch)
     logger.info(min_mmd)
 
-    plt.figure()
-    plt.plot(loss_list) 
-    plt.title("training loss over epochs")
-    plt.savefig(("%s-mnist_loss.png") % (out_file))
+    plot_file = f"{args.model}_{args.prior}_modes{args.modes}_{args.plot_run}.csv"
 
-    # plot eps loss
-    plt.figure()
-    plt.plot(mmd_list) 
-    plt.title("mmd metric over epochs")
-    plt.savefig(("%s-mnist_mmd.png") % (out_file))
- 
+    with open(plot_file, 'a', newline='') as file:
+        writer = csv.writer(file)
+        if file.tell() == 0:
+            writer.writerow(["seed", "epoch", "loss", "mmd_lowres", "mmd_highres"])
+        for epoch, (loss, mmd_low, mmd_high) in enumerate(zip(loss_list, mmd_list, mmd2_list)):
+            writer.writerow([args.seed, epoch, loss, mmd_low, mmd_high])
+
     return rev_sde, history, loss_list, mmd_list
 
 def choose_prior(string):
@@ -205,7 +210,7 @@ if __name__ == '__main__':
     batches = [256]
     numstep_values = [200]
     priorchoices = ['fno','combined_conv','lap_conv','standard']
-    modelchoices = ['unet','fno']
+    modelchoices = ['unet','fno','cno']
     modeschoices = [8, 12, 14, 15]
     widthchoices = [32, 64, 128]
 
@@ -219,7 +224,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps', type=int, default=200, choices = numstep_values, help='number of SDE timesteps')
     parser.add_argument('--input_height', type=int, default=28, help='starting image dimensions')
     parser.add_argument('--prior_name', type=str, default='combined_conv', choices = priorchoices, help="prior setup")
-    parser.add_argument('--width', type=str, default=64, choices = widthchoices, help="prior setup")
+    parser.add_argument('--width', type=int, default=64, choices = widthchoices, help="prior setup")
     parser.add_argument('--model', type=str, default='fno', choices = modelchoices, help='nn model')
     parser.add_argument('--modes', type=int, default=14, choices = modeschoices, help='cutoff modes in FNO')
     parser.add_argument('--viz_freq', type=int, default=10, help='how often to store generated images')
@@ -228,16 +233,22 @@ if __name__ == '__main__':
     parser.add_argument('--out_dir', type=str, default='result', help='directory for result')
     parser.add_argument('--out_file', type=str, default='result', help='base file name for result')
     parser.add_argument('--subset', type=int, default=0, help='indicate 1 for training on 1/10th of subset')
+    parser.add_argument('--plot_run', type=int, default=0, help='indicate whether the run is part of a plot cycle')
 
     args = parser.parse_args()
     
-    # testing on smaller dataset affects number of validation samples
+    #testing on smaller dataset affects number of validation samples
     if args.subset:
         args.num_samples_mmd = 1000
     
     args.prior = choose_prior(args.prior_name)
     if args.model == "fno":
         model = FNO2d(args.modes,args.modes,args.width).to(device) 
+    
+    if args.model == "cno":
+        model = CNO(in_dim=1, in_size=args.input_height, N_layers=3, N_res=4, channel_multiplier=64,
+                    latent_lift_proj_dim=32, time_steps=args.num_steps)
+
     else:
         model = UNet(
         input_channels=1,
@@ -258,8 +269,10 @@ if __name__ == '__main__':
     
     makedirs(args.out_dir)
     logger = get_logger(logpath= out_file + '.txt', filepath=os.path.abspath(__file__))
-
+    
+    print(f"Chosen prior: {args.prior}")
+    print(f"Repr of chosen prior: {repr(args.prior)}")
     for arg, value in vars(args).items():
         logger.info("%s: %s", arg, value)
-
+    
     rev_sde, history, loss_list, mmd_list = training(args.seed, model, args, out_file=out_file)
