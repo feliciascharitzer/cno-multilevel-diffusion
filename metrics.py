@@ -6,11 +6,16 @@ from numpy import linalg
 import numpy as np
 import pykeops.config
 
+#--------------------------------------
+
+# Implementation from https://arxiv.org/abs/2303.04772v3  
+ 
+#--------------------------------------
+
 device = 'cpu'
-# ensure that pykeops runs on cpu
+#ensure that pykeops runs on cpu
 pykeops.config.gpu_available=False
 
-#add proper reference..
 # https://github.com/layer6ai-labs/dgm-eval
 def entropy_q(p, q=1):
     p_ = p[p > 0]
@@ -34,7 +39,10 @@ def sw_approx(X, Y):
 # https://github.com/layer6ai-labs/dgm-eval
 def compute_vendi_score(X, q=1):
     # X is tensor in cno implementation
+    print("initial x: ", X)
     X = X.numpy()
+    # add small pertturbation to values of X == 0
+    X[X == 0] += 1e-10 
     X = X/(np.sqrt(np.sum(X**2, axis = 1))[:,None])
     n = X.shape[0]
     S = X @ X.T
